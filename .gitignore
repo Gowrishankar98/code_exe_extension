@@ -1,0 +1,11 @@
+# Node modules and VS Code
+node_modules
+dist
+.vscode
+yarn.lock
+package-lock.json
+
+
+# Misc
+*.log
+.DS_Store
