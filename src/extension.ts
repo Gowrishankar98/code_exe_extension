@@ -22,30 +22,30 @@ export function activate(context: vscode.ExtensionContext) {
       panel.webview.html = htmlContent;
 
       panel.webview.onDidReceiveMessage(async (message) => {
-        console.log("📥 Got message from webview:", message);
-        if (message.command === "ask") {
-          console.log("🧠 Got prompt from webview:", message.text);
+        console.log("📥 Got message from webview:", message.command);
+        if (message.command === "prompt") {
+          console.log("🧠 Got prompt from webview:", message.value);
 
           try {
             const response = await fetch("http://127.0.0.1:8000/generate", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ prompt: message.text }),
+              body: JSON.stringify({ prompt: message.value }),
             });
 
             const data = (await response.json()) as { code: string };
             if (typeof data === "object" && "code" in data) {
               panel.webview.postMessage({
                 command: "answer",
-                text: (data as any).code,
+                value: (data as any).code,
               });
               console.log("✅ Backend responded:", data);
             }
           } catch (err) {
             console.error("❌ Fetch error:");
             panel.webview.postMessage({
-              command: "answer",
-              text: "Failed to connect to backend: ",
+              command: "response",
+              value: "Failed to connect to backend: ",
             });
           }
         }
