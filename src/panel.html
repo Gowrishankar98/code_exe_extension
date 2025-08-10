@@ -3,80 +3,250 @@
 
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CodeBuddy Chat</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Code_Exe</title>
     <style>
         body {
-            font-family: sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f7fa;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            background: #4A90E2;
+            color: white;
             padding: 1rem;
+            font-weight: bold;
+            font-size: 1.2rem;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
 
         #chat {
-            height: 70vh;
+            flex: 1;
             overflow-y: auto;
-            border: 1px solid #ccc;
             padding: 1rem;
-            margin-bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            background: white;
+        }
+
+        .message {
+            max-width: 70%;
+            padding: 0.8rem 1rem;
+            border-radius: 12px;
+            line-height: 1.4;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background: #4A90E2;
+            color: white;
+            border-bottom-right-radius: 0;
+        }
+
+        .message.bot {
+            align-self: flex-start;
+            background: #e9efff;
+            color: #222;
+            border-bottom-left-radius: 0;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        #input-area {
+            display: flex;
+            padding: 0.75rem;
+            background: white;
+            box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
         }
 
         textarea {
-            width: 100%;
-            height: 80px;
+            flex: 1;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 0.6rem;
+            font-size: 1rem;
+            resize: none;
+            outline: none;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
         button {
-            padding: 0.5rem 1rem;
-            margin-top: 0.5rem;
+            background: #4A90E2;
+            color: white;
+            border: none;
+            padding: 0.6rem 1.2rem;
+            margin-left: 0.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.3s;
         }
 
-        .bot {
-            color: #444;
-            background: #f4f4f4;
-            padding: 0.5rem;
-            border-radius: 6px;
-            margin: 0.5rem 0;
+        button:hover {
+            background: #3c7ac7;
         }
 
-        .user {
-            font-weight: bold;
-            margin: 0.5rem 0;
+        /* Code bubble styling */
+
+        .code-bubble {
+            position: relative;
+            background: #23272e;
+            color: #fff;
+            border-radius: 10px;
+            padding: 1.1em 1em 1em 1em;
+            margin: 0.3em 0;
+            font-family: 'Fira Mono', 'Consolas', monospace;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            font-size: 0.82rem;
+            padding: 2px 10px;
+            background: #4A90E2;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            opacity: 0.92;
+            z-index: 2;
+            transition: background 0.2s, opacity 0.2s;
+        }
+
+        .copy-btn:hover {
+            opacity: 1;
+            background: #3570c7;
+        }
+
+        .copy-btn.copied {
+            background: #35884a;
         }
     </style>
 </head>
 
 <body>
-    <div id="chat"></div>
-    <div id="input-area" style="display: flex; justify-content: space-between;"></div>
-    <textarea id="input" placeholder="Ask code_exe something..."></textarea><br />
-    <button onclick="sendPrompt()">Send</button>
+    <header>💬 Code_Exe</header>
+
+    <div id="chat">
+        <div class="message bot">🤖 Hello! How can I help you today?</div>
+    </div>
+
+    <div id="input-area">
+        <textarea id="input" placeholder="Type your message..."></textarea>
+        <button onclick="sendPrompt()">Send</button>
     </div>
 
     <script>
-        const vscode = acquireVsCodeApi();
+        const vscode = typeof acquireVsCodeApi === "function" ? acquireVsCodeApi() : null;
+        const chat = document.getElementById('chat');
+        const input = document.getElementById('input');
 
+        // Determine if a string looks like code
+        function isCodeBlock(text) {
+            // Detect markdown fenced code blocks or typical JS code-start keywords
+            return /``````/.test(text) ||
+                /^(\s*const\s+|\s*let\s+|\s*function\s+|\s*export\s+|\s*import\s+)/m.test(text);
+        }
+
+        // Extract code inside markdown fenced code blocks if present
+        function extractCode(text) {
+            const match = text.match(/``````/);
+            if (match && match[1]) return match[1].trim();
+            return text.trim();
+        }
+
+        // Sanitize text for safe HTML display
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+        }
+
+        // Append a message bubble to chat, with code bubble + copy button if code
         function appendMessage(sender, text) {
             const div = document.createElement('div');
-            div.className = sender;
-            div.textContent = `${text}`;
-            document.getElementById('chat').appendChild(div);
+            div.className = `message ${sender}`;
+
+            if (sender === "bot" && isCodeBlock(text)) {
+                const code = extractCode(text);
+                div.innerHTML = `
+                    <div class="code-bubble">
+                        <button class="copy-btn">Copy</button>
+                        <pre><code>${escapeHtml(code)}</code></pre>
+                    </div>
+                `;
+            } else {
+                div.textContent = text;
+            }
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
         }
 
+        // Handle copy button clicks using event delegation
+        document.addEventListener('click', function (ev) {
+            const btn = ev.target.closest('.copy-btn');
+            if (btn) {
+                const root = btn.closest('.code-bubble');
+                if (!root) return;
+                const code = root.querySelector('code').textContent;
+                navigator.clipboard.writeText(code).then(() => {
+                    btn.textContent = 'Copied!';
+                    btn.classList.add('copied');
+                    setTimeout(() => {
+                        btn.textContent = 'Copy';
+                        btn.classList.remove('copied');
+                    }, 1000);
+                });
+                ev.stopPropagation();
+            }
+        });
+
+        // Send user prompt to the extension backend
         function sendPrompt() {
-            const input = document.getElementById("input");
             const prompt = input.value.trim();
             if (!prompt) return;
-            appendMessage("user", "🧑 " + prompt);
-            vscode.postMessage({ command: "prompt", value: prompt });
-            input.value = "";
+            appendMessage('user', prompt + " 🧑");
+
+            if (vscode) {
+                vscode.postMessage({ command: 'prompt', value: prompt });
+            } else {
+                // Fallback for testing outside VSCode
+                setTimeout(() => {
+                    appendMessage('bot', "🤖 This is a simulated reply.");
+                }, 800);
+            }
+            input.value = '';
         }
 
-        window.addEventListener("message", event => {
+        // Enter key sends prompt, Shift+Enter new line
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendPrompt();
+            }
+        });
+
+        // Listen for messages from extension backend
+        window.addEventListener('message', event => {
             const message = event.data;
-            if (message.command === "answer") {
-                appendMessage("bot", "🤖 " + message.value);
+            if (message.command === 'answer') {
+                appendMessage('bot', "🤖 " + message.value);
             }
         });
     </script>
+
 </body>
 
 </html>
