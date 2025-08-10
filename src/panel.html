@@ -94,83 +94,48 @@
             background: #3c7ac7;
         }
 
-        /* Code response container */
-        #code-response-container {
-            background: #2d2d2d;
-            color: #ccc;
-            font-family: 'Courier New', Courier, monospace;
-            padding: 1rem;
-            border-radius: 8px;
-            margin: 1rem;
-            max-height: 50vh;
-            overflow-y: auto;
-            position: relative;
-        }
+        /* Code bubble styling */
 
-        #code-response-container pre {
-            margin: 0;
+        .code-bubble {
+            position: relative;
+            background: #23272e;
+            color: #fff;
+            border-radius: 10px;
+            padding: 1.1em 1em 1em 1em;
+            margin: 0.3em 0;
+            font-family: 'Fira Mono', 'Consolas', monospace;
+            overflow-x: auto;
             white-space: pre-wrap;
         }
 
-        button.copy-btn {
+        .copy-btn {
             position: absolute;
             top: 8px;
             right: 8px;
+            font-size: 0.82rem;
+            padding: 2px 10px;
             background: #4A90E2;
+            color: #fff;
             border: none;
-            color: white;
-            padding: 0.3rem 0.6rem;
-            border-radius: 5px;
+            border-radius: 4px;
             cursor: pointer;
-            font-size: 0.85rem;
-            transition: background 0.3s;
+            opacity: 0.92;
+            z-index: 2;
+            transition: background 0.2s, opacity 0.2s;
         }
 
-        button.copy-btn:hover {
+        .copy-btn:hover {
+            opacity: 1;
             background: #3570c7;
         }
 
-        /* Description/explanation container */
-        #description-container {
-            background: #e8f0fe;
-            border-left: 6px solid #4A90E2;
-            border-radius: 6px;
-            margin: 1rem;
-            padding: 1rem 1.2rem;
-            color: #222;
-            font-size: 1rem;
-            line-height: 1.5;
-        }
-
-        #description-container h3 {
-            margin-top: 0;
-            margin-bottom: 0.75rem;
-        }
-
-        #description-container ul {
-            padding-left: 1.2rem;
-        }
-
-        #description-container li {
-            margin-bottom: 0.5rem;
-        }
-
-        /* Scrollbar styling for better UX */
-        #chat::-webkit-scrollbar,
-        #code-response-container::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        #chat::-webkit-scrollbar-thumb,
-        #code-response-container::-webkit-scrollbar-thumb {
-            background-color: rgba(74, 144, 226, 0.5);
-            border-radius: 4px;
+        .copy-btn.copied {
+            background: #35884a;
         }
     </style>
 </head>
 
 <body>
-
     <header>💬 Code_Exe</header>
 
     <div id="chat">
@@ -182,57 +147,90 @@
         <button onclick="sendPrompt()">Send</button>
     </div>
 
-    <!-- Code response section -->
-    <section id="code-response-container" style="display:none;">
-        <button class="copy-btn" onclick="copyCode()">Copy Code</button>
-        <pre id="code-block"></pre>
-    </section>
-
-    <!-- Description/Explanation section -->
-    <section id="description-container" style="display:none;">
-        <h3>Explanation</h3>
-        <ul id="description-list"></ul>
-    </section>
-
     <script>
-        const vscode = acquireVsCodeApi?.() || null;
+        const vscode = typeof acquireVsCodeApi === "function" ? acquireVsCodeApi() : null;
         const chat = document.getElementById('chat');
         const input = document.getElementById('input');
-        const codeContainer = document.getElementById('code-response-container');
-        const codeBlock = document.getElementById('code-block');
-        const descriptionContainer = document.getElementById('description-container');
-        const descriptionList = document.getElementById('description-list');
 
+        // Determine if a string looks like code
+        function isCodeBlock(text) {
+            // Detect markdown fenced code blocks or typical JS code-start keywords
+            return /``````/.test(text) ||
+                /^(\s*const\s+|\s*let\s+|\s*function\s+|\s*export\s+|\s*import\s+)/m.test(text);
+        }
+
+        // Extract code inside markdown fenced code blocks if present
+        function extractCode(text) {
+            const match = text.match(/``````/);
+            if (match && match[1]) return match[1].trim();
+            return text.trim();
+        }
+
+        // Sanitize text for safe HTML display
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+        }
+
+        // Append a message bubble to chat, with code bubble + copy button if code
         function appendMessage(sender, text) {
             const div = document.createElement('div');
             div.className = `message ${sender}`;
-            div.textContent = text;
+
+            if (sender === "bot" && isCodeBlock(text)) {
+                const code = extractCode(text);
+                div.innerHTML = `
+                    <div class="code-bubble">
+                        <button class="copy-btn">Copy</button>
+                        <pre><code>${escapeHtml(code)}</code></pre>
+                    </div>
+                `;
+            } else {
+                div.textContent = text;
+            }
             chat.appendChild(div);
             chat.scrollTop = chat.scrollHeight;
-            // Hide code/description when a new message comes in by default
-            hideCodeResponse();
-            hideDescription();
         }
 
+        // Handle copy button clicks using event delegation
+        document.addEventListener('click', function (ev) {
+            const btn = ev.target.closest('.copy-btn');
+            if (btn) {
+                const root = btn.closest('.code-bubble');
+                if (!root) return;
+                const code = root.querySelector('code').textContent;
+                navigator.clipboard.writeText(code).then(() => {
+                    btn.textContent = 'Copied!';
+                    btn.classList.add('copied');
+                    setTimeout(() => {
+                        btn.textContent = 'Copy';
+                        btn.classList.remove('copied');
+                    }, 1000);
+                });
+                ev.stopPropagation();
+            }
+        });
+
+        // Send user prompt to the extension backend
         function sendPrompt() {
             const prompt = input.value.trim();
             if (!prompt) return;
-            appendMessage('user', "🧑 " + prompt);
+            appendMessage('user', prompt + " 🧑");
 
             if (vscode) {
                 vscode.postMessage({ command: 'prompt', value: prompt });
             } else {
-                // Demo fallback: simulate bot response
+                // Fallback for testing outside VSCode
                 setTimeout(() => {
                     appendMessage('bot', "🤖 This is a simulated reply.");
-                    // Optionally show code or explanation UI with dummy content here for demo
                 }, 800);
             }
-
             input.value = '';
         }
 
-        // Press Enter to send, Shift + Enter for newline
+        // Enter key sends prompt, Shift+Enter new line
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -240,61 +238,13 @@
             }
         });
 
-        // Listen for bot answer or code explanation messages
+        // Listen for messages from extension backend
         window.addEventListener('message', event => {
             const message = event.data;
             if (message.command === 'answer') {
                 appendMessage('bot', "🤖 " + message.value);
-                // Optionally hide code/explanation when normal answer arrives
-                hideCodeResponse();
-                hideDescription();
-            }
-            // New commands to show code or explanation UI
-            else if (message.command === 'code') {
-                showCodeResponse(message.value);
-            }
-            else if (message.command === 'explanation') {
-                showDescription(message.value);
             }
         });
-
-        // Show code response UI with formatted text
-        function showCodeResponse(codeText) {
-            codeBlock.textContent = codeText;
-            codeContainer.style.display = 'block';
-        }
-
-        function hideCodeResponse() {
-            codeContainer.style.display = 'none';
-            codeBlock.textContent = '';
-        }
-
-        // Show explanation list (expects an array of strings)
-        function showDescription(items) {
-            if (!Array.isArray(items)) return;
-            descriptionList.innerHTML = '';
-            items.forEach(item => {
-                const li = document.createElement('li');
-                li.textContent = item;
-                descriptionList.appendChild(li);
-            });
-            descriptionContainer.style.display = 'block';
-        }
-
-        function hideDescription() {
-            descriptionContainer.style.display = 'none';
-            descriptionList.innerHTML = '';
-        }
-
-        // Copy code block to clipboard
-        function copyCode() {
-            if (!codeBlock.textContent) return;
-            navigator.clipboard.writeText(codeBlock.textContent).then(() => {
-                alert("Code copied to clipboard!");
-            }, () => {
-                alert("Failed to copy code.");
-            });
-        }
     </script>
 
 </body>
